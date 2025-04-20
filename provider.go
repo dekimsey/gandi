@@ -19,6 +19,25 @@ type Provider struct {
 	mutex   sync.Mutex
 }
 
+func (p *Provider) ListZones(ctx context.Context) ([]libdns.Zone, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.gandi.net/v5/livedns/domains", nil)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create request: %w", err)
+	}
+	var gandiDomains []gandiDomain
+	_, err = p.doRequest(req, &gandiDomains)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get zones from Gandi: %w", err)
+	}
+	var zones []libdns.Zone
+	for _, domain := range gandiDomains {
+		zones = append(zones, libdns.Zone{
+			Name: domain.Fqdn,
+		})
+	}
+	return zones, nil
+}
+
 // GetRecords lists all the records in the zone.
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	domain, err := p.getDomain(ctx, zone)
@@ -120,4 +139,5 @@ var (
 	_ libdns.RecordAppender = (*Provider)(nil)
 	_ libdns.RecordSetter   = (*Provider)(nil)
 	_ libdns.RecordDeleter  = (*Provider)(nil)
+	_ libdns.ZoneLister     = (*Provider)(nil)
 )
