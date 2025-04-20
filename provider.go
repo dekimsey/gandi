@@ -3,6 +3,7 @@ package gandi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -22,18 +23,18 @@ type Provider struct {
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	domain, err := p.getDomain(ctx, zone)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot get records, unable to get zone details: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", domain.DomainRecordsHref, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create request: %w", err)
 	}
 
 	var gandiRecords []gandiRecord
 	_, err = p.doRequest(req, &gandiRecords)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get zone records from %v: %w", domain.DomainRecordsHref, err)
 	}
 
 	var libRecords []libdns.Record
@@ -47,10 +48,10 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 				TTL:  time.Duration(rec.RRSetTTL) * time.Second,
 				Data: val,
 			}
-			// parse the raw resource record to a resource-typed struct for returning
+			// If possible, parse the raw resource record to a resource-typed struct for returning
 			rr, err := rawRR.Parse()
 			if err != nil {
-				merr = errors.Join(merr, err)
+				merr = errors.Join(merr, fmt.Errorf("failed to parse RR type=%v, name=%v: %w", rec.RRSetType, rec.RRSetName, err))
 			}
 
 			libRecords = append(libRecords, rr)
@@ -65,13 +66,13 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	domain, err := p.getDomain(ctx, zone)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot append records, unable to get zone details: %w", err)
 	}
 
 	for _, rec := range records {
 		err := p.setRecord(ctx, zone, rec.RR(), domain)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to append record %v: %w", rec.RR().Name, err)
 		}
 	}
 
@@ -82,13 +83,13 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	domain, err := p.getDomain(ctx, zone)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get zone details: %w", err)
 	}
 
 	for _, rec := range records {
 		err := p.deleteRecord(ctx, zone, rec.RR(), domain)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to delete record %v: %w", rec.RR().Name, err)
 		}
 	}
 
@@ -100,13 +101,13 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	domain, err := p.getDomain(ctx, zone)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot set records, unable to get zone details: %w", err)
 	}
 
 	for _, rec := range records {
 		err := p.setRecord(ctx, zone, rec.RR(), domain)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to set record %v: %w", rec.RR().Name, err)
 		}
 	}
 
