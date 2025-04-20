@@ -2,6 +2,7 @@ package gandi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -36,20 +37,27 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	}
 
 	var libRecords []libdns.Record
+	var merr error
 	for _, rec := range gandiRecords {
 		for _, val := range rec.RRSetValues {
-			rec := libdns.RR{
+			// Convert the raw record to a libdns resource record
+			rawRR := libdns.RR{
 				Type: rec.RRSetType,
 				Name: rec.RRSetName,
 				TTL:  time.Duration(rec.RRSetTTL) * time.Second,
 				Data: val,
 			}
+			// parse the raw resource record to a resource-typed struct for returning
+			rr, err := rawRR.Parse()
+			if err != nil {
+				merr = errors.Join(merr, err)
+			}
 
-			libRecords = append(libRecords, rec)
+			libRecords = append(libRecords, rr)
 		}
 	}
 
-	return libRecords, nil
+	return libRecords, merr
 }
 
 // AppendRecords adds records to the zone and returns the records that were created.
